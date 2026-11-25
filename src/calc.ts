@@ -1,10 +1,17 @@
 import type { Trade } from './types';
 
+/** Frais totaux : fixes + % du montant échangé à l'entrée et à la sortie. */
+export function tradeFees(t: Trade): number {
+  const mult = t.multiplier ?? 1;
+  const notional = (t.entry + (t.exit ?? 0)) * t.qty * mult;
+  return (t.fees ?? 0) + (t.feePct ? (Math.abs(notional) * t.feePct) / 100 : 0);
+}
+
 export function tradePnl(t: Trade): number | null {
   if (t.exit == null || !isFinite(t.exit)) return null;
   const dir = t.side === 'long' ? 1 : -1;
   const mult = t.multiplier ?? 1;
-  return (t.exit - t.entry) * t.qty * mult * dir - (t.fees ?? 0);
+  return (t.exit - t.entry) * t.qty * mult * dir - tradeFees(t);
 }
 
 /** Risque initial en devise (distance au stop × taille). */
@@ -161,7 +168,7 @@ export function computeStats(all: Trade[]): Stats {
     expectancy: closed.length ? netPnl / closed.length : 0,
     avgR: rs.length ? rs.reduce((s, r) => s + r, 0) / rs.length : null,
     rCount: rs.length,
-    totalFees: closed.reduce((s, r) => s + (r.trade.fees ?? 0), 0),
+    totalFees: closed.reduce((s, r) => s + tradeFees(r.trade), 0),
     maxDrawdown,
     best,
     worst,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db, deleteTrade, uid, updateTrade } from '../db';
-import { sortChrono, tradePnl, tradeR, tradeRisk } from '../calc';
+import { sortChrono, tradeFees, tradePnl, tradeR, tradeRisk } from '../calc';
 import { fmtMoney, fmtR, parseNum, pnlClass, useSettings } from '../format';
 import { EMOTIONS, MISTAKES, type Trade } from '../types';
 import ImageGallery from '../components/ImageGallery';
@@ -80,6 +80,7 @@ function Editor({ initial }: { initial: Trade }) {
         <div className="hero-figs">
           <div><span className="muted">P&amp;L</span><strong className={pnlClass(pnl)}>{pnl == null ? 'Ouvert' : fmtMoney(pnl, settings.currency)}</strong></div>
           <div><span className="muted">R</span><strong>{fmtR(r)}</strong></div>
+          <div><span className="muted">Frais</span><strong>{fmtMoney(tradeFees(t), settings.currency, false)}</strong></div>
           <div><span className="muted">Risque</span><strong>{risk == null ? '—' : fmtMoney(risk, settings.currency, false)}</strong></div>
         </div>
       </section>
@@ -101,7 +102,8 @@ function Editor({ initial }: { initial: Trade }) {
             <NumField label="Sortie" value={t.exit} onChange={(v) => patch({ exit: v })} placeholder="ouvert" />
             <NumField label="Stop" value={t.stop} onChange={(v) => patch({ stop: v })} />
             <NumField label="Objectif" value={t.target} onChange={(v) => patch({ target: v })} />
-            <NumField label={`Frais (${settings.currency})`} value={t.fees} onChange={(v) => patch({ fees: v ?? undefined })} />
+            <NumField label={`Frais fixes (${settings.currency})`} value={t.fees} onChange={(v) => patch({ fees: v ?? undefined })} />
+            <NumField label="Frais (%)" value={t.feePct} onChange={(v) => patch({ feePct: v ?? undefined })} placeholder="ex. 0,1" />
             <NumField label="Valeur du point" value={t.multiplier ?? 1} onChange={(v) => patch({ multiplier: v ?? undefined })} />
             <Field label="Setup"><input value={t.setup ?? ''} onChange={(e) => patch({ setup: e.target.value || undefined })} /></Field>
           </div>

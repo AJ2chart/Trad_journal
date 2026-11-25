@@ -14,7 +14,10 @@ export interface Trade {
   exit: number | null;
   stop?: number | null;
   target?: number | null;
+  /** Frais fixes en devise */
   fees?: number;
+  /** Frais en % du montant échangé (entrée + sortie) */
+  feePct?: number;
   /** Valeur d'un point (futures, contrats). 1 par défaut. */
   multiplier?: number;
   setup?: string;
@@ -51,12 +54,15 @@ export interface Lesson {
 export interface Settings {
   currency: string;
   defaultFees: number;
+  /** Frais en % par défaut (crypto, actions) */
+  defaultFeePct: number;
   defaultMultiplier: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   currency: '€',
   defaultFees: 0,
+  defaultFeePct: 0,
   defaultMultiplier: 1,
 };
 

@@ -15,6 +15,8 @@ describe('calculs', () => {
     expect(tradePnl(T({ entry: 100, exit: 110, fees: 3 }))).toBe(7);
     expect(tradePnl(T({ entry: 15000, exit: 15010, multiplier: 5 }))).toBe(50);
     expect(tradePnl(T({ exit: null }))).toBeNull();
+    // 0,1 % sur (100 + 110) × 1 = 0,21
+    expect(tradePnl(T({ entry: 100, exit: 110, feePct: 0.1 }))).toBeCloseTo(9.79);
   });
 
   it('R multiple', () => {

@@ -64,6 +64,7 @@ export default function Journal() {
       stop: parseNum(f.stop),
       setup: f.setup.trim() || undefined,
       fees: settings.defaultFees || undefined,
+      feePct: settings.defaultFeePct || undefined,
       multiplier: settings.defaultMultiplier !== 1 ? settings.defaultMultiplier : undefined,
       createdAt: now,
       updatedAt: now,

@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const settings = useSettings();
   const [currency, setCurrency] = useState(settings.currency);
   const [fees, setFees] = useState(String(settings.defaultFees));
+  const [feePct, setFeePct] = useState(String(settings.defaultFeePct));
   const [mult, setMult] = useState(String(settings.defaultMultiplier));
   const [msg, setMsg] = useState('');
   const [usage, setUsage] = useState('');
@@ -27,8 +28,9 @@ export default function SettingsPage() {
   useEffect(() => {
     setCurrency(settings.currency);
     setFees(String(settings.defaultFees));
+    setFeePct(String(settings.defaultFeePct));
     setMult(String(settings.defaultMultiplier));
-  }, [settings.currency, settings.defaultFees, settings.defaultMultiplier]);
+  }, [settings.currency, settings.defaultFees, settings.defaultFeePct, settings.defaultMultiplier]);
 
   useEffect(() => {
     navigator.storage?.estimate?.().then((e) => {
@@ -37,7 +39,7 @@ export default function SettingsPage() {
   }, []);
 
   async function save() {
-    await saveSettings({ currency: currency.trim() || '€', defaultFees: parseNum(fees) ?? 0, defaultMultiplier: parseNum(mult) ?? 1 });
+    await saveSettings({ currency: currency.trim() || '€', defaultFees: parseNum(fees) ?? 0, defaultFeePct: parseNum(feePct) ?? 0, defaultMultiplier: parseNum(mult) ?? 1 });
     setMsg('Réglages enregistrés.');
   }
 
@@ -48,7 +50,7 @@ export default function SettingsPage() {
 
   async function doCsv() {
     const trades = await db.trades.orderBy('date').toArray();
-    const cols = ['date', 'time', 'symbol', 'side', 'qty', 'entry', 'exit', 'stop', 'target', 'fees', 'multiplier', 'pnl', 'setup', 'followedPlan', 'rating', 'emotions', 'mistakes', 'reasonEntry', 'reasonExit', 'notes'];
+    const cols = ['date', 'time', 'symbol', 'side', 'qty', 'entry', 'exit', 'stop', 'target', 'fees', 'feePct', 'multiplier', 'pnl', 'setup', 'followedPlan', 'rating', 'emotions', 'mistakes', 'reasonEntry', 'reasonExit', 'notes'];
     const lines = trades.map((t) => cols.map((c) => {
       if (c === 'pnl') return csvCell(tradePnl(t)?.toFixed(2));
       const v = (t as unknown as Record<string, unknown>)[c];
@@ -83,10 +85,11 @@ export default function SettingsPage() {
         <h2>Préférences</h2>
         <div className="fields">
           <label className="field"><span>Devise</span><input value={currency} onChange={(e) => setCurrency(e.target.value)} /></label>
-          <label className="field"><span>Frais par défaut (par trade)</span><input inputMode="decimal" value={fees} onChange={(e) => setFees(e.target.value)} /></label>
+          <label className="field"><span>Frais fixes par trade</span><input inputMode="decimal" value={fees} onChange={(e) => setFees(e.target.value)} /></label>
+          <label className="field"><span>Frais en % (entrée + sortie)</span><input inputMode="decimal" value={feePct} onChange={(e) => setFeePct(e.target.value)} placeholder="ex. 0,1" /></label>
           <label className="field"><span>Valeur du point par défaut</span><input inputMode="decimal" value={mult} onChange={(e) => setMult(e.target.value)} /></label>
         </div>
-        <p className="muted small">Valeur du point : 1 pour les actions et la crypto. Pour un future (ex. 5 € par point sur le mini-DAX), indique 5. Le P&amp;L = (sortie − entrée) × quantité × valeur du point − frais.</p>
+        <p className="muted small">Valeur du point : 1 pour les actions et la crypto. Pour un future (ex. 5 € par point sur le mini-DAX), indique 5. Frais en % : appliqués au montant échangé à l’entrée et à la sortie (ex. 0,1 % sur Binance en taker). Le P&amp;L = (sortie − entrée) × quantité × valeur du point − frais.</p>
         <button className="btn primary" onClick={save}>Enregistrer</button>
       </section>
 
