@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { db, exportBackup, importBackup, saveSettings } from '../db';
 import { tradePnl } from '../calc';
 import { parseNum, useSettings } from '../format';
+import { FUTURES_PRESETS, deleteInstrument, saveInstrument, useInstruments, type Instrument } from '../instruments';
 
 function download(blob: Blob, name: string) {
   const a = document.createElement('a');
@@ -34,7 +35,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     navigator.storage?.estimate?.().then((e) => {
-      if (e.usage != null) setUsage(`${(e.usage / 1e6).toFixed(1)} Mo utilisés`);
+      if (e.usage != null) setUsage(`${(e.usage / 1e6).toFixed(1).replace('.', ',')} Mo utilisés`);
     });
   }, []);
 
@@ -93,6 +94,8 @@ export default function SettingsPage() {
         <button className="btn primary" onClick={save}>Enregistrer</button>
       </section>
 
+      <InstrumentsSection currency={settings.currency} />
+
       <section className="card">
         <h2>Sauvegarde</h2>
         <p className="muted small">Tes données restent sur cet appareil{usage ? ` (${usage})` : ''}. Exporte régulièrement une sauvegarde : elle contient aussi les captures.</p>
@@ -110,5 +113,79 @@ export default function SettingsPage() {
 
       {msg && <p className="toast" role="status" onClick={() => setMsg('')}>{msg}</p>}
     </div>
+  );
+}
+
+function InstrumentsSection({ currency }: { currency: string }) {
+  const instruments = useInstruments();
+  const [sym, setSym] = useState('');
+  const [mult, setMult] = useState('');
+  const rows = Object.entries(instruments).sort(([a], [b]) => a.localeCompare(b));
+
+  async function add() {
+    const m = parseNum(mult);
+    if (!sym.trim() || m == null || m <= 0) return;
+    await saveInstrument(sym, { multiplier: m });
+    setSym(''); setMult('');
+  }
+
+  return (
+    <section className="card">
+      <h2>Instruments</h2>
+      <p className="muted small">
+        Valeur du point et frais retenus par symbole, appliqués automatiquement à la saisie.
+        Actions et crypto : rien à faire (valeur du point = 1). Futures : ajoute tes contrats ci-dessous.
+        La valeur du point se modifie aussi depuis le détail d’un trade, et l’appli la retient pour ce symbole.
+      </p>
+      {rows.length > 0 && (
+        <div className="table-scroll">
+          <table className="instruments">
+            <thead><tr><th>Symbole</th><th>Valeur du point</th><th>Frais fixes ({currency})</th><th>Frais %</th><th /></tr></thead>
+            <tbody>
+              {rows.map(([s, i]) => <InstrumentRow key={s} symbol={s} inst={i} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="row" style={{ marginTop: 10 }}>
+        <input value={sym} onChange={(e) => setSym(e.target.value.toUpperCase())} placeholder="Symbole (ex. MNQ)" />
+        <input value={mult} onChange={(e) => setMult(e.target.value)} inputMode="decimal" placeholder="Valeur du point" onKeyDown={(e) => e.key === 'Enter' && add()} />
+        <button className="btn" onClick={add}>Ajouter</button>
+      </div>
+      <h3>Futures courants</h3>
+      <div className="presets">
+        {FUTURES_PRESETS.map((p) => (
+          <button key={p.symbol} className={instruments[p.symbol] ? 'chip on' : 'chip'} title={`${p.label} : ${p.multiplier} ${p.currency} par point`}
+            onClick={() => instruments[p.symbol] ? deleteInstrument(p.symbol) : saveInstrument(p.symbol, { multiplier: p.multiplier, label: p.label })}>
+            {p.symbol} <span className="muted">×{String(p.multiplier).replace('.', ',')} {p.currency}</span>
+          </button>
+        ))}
+      </div>
+      <p className="muted small">
+        Clique pour ajouter ou retirer. Attention : les contrats US sont en dollars. Si ta devise est l’euro,
+        le P&amp;L de ces trades sera exprimé en dollars, sans conversion.
+      </p>
+    </section>
+  );
+}
+
+function InstrumentRow({ symbol, inst }: { symbol: string; inst: Instrument }) {
+  const num = (k: 'multiplier' | 'fees' | 'feePct') => ({
+    defaultValue: inst[k] == null ? '' : String(inst[k]).replace('.', ','),
+    inputMode: 'decimal' as const,
+    onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
+      const v = parseNum(e.target.value);
+      if (k === 'multiplier' && (v == null || v <= 0)) return;
+      void saveInstrument(symbol, { [k]: v ?? undefined });
+    },
+  });
+  return (
+    <tr>
+      <td title={inst.label}>{symbol}</td>
+      <td><input {...num('multiplier')} aria-label={`Valeur du point ${symbol}`} /></td>
+      <td><input {...num('fees')} placeholder="—" aria-label={`Frais fixes ${symbol}`} /></td>
+      <td><input {...num('feePct')} placeholder="—" aria-label={`Frais % ${symbol}`} /></td>
+      <td><button className="btn ghost small" onClick={() => deleteInstrument(symbol)} aria-label={`Retirer ${symbol}`}>✕</button></td>
+    </tr>
   );
 }

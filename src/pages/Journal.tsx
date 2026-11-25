@@ -5,11 +5,13 @@ import { db, uid } from '../db';
 import { computeStats, sortChrono, tradePnl, tradeR } from '../calc';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtR, parseNum, pnlClass, today, useSettings } from '../format';
 import type { Side, Trade } from '../types';
+import { defaultsFor, useInstruments } from '../instruments';
 
 const EMPTY = { symbol: '', qty: '', entry: '', exit: '', stop: '', setup: '' };
 
 export default function Journal() {
   const settings = useSettings();
+  const instruments = useInstruments();
   const navigate = useNavigate();
   const trades = useLiveQuery(() => db.trades.toArray(), []) ?? [];
   const imageTradeIds = useLiveQuery(async () => new Set(await db.images.orderBy('tradeId').uniqueKeys()), []);
@@ -41,6 +43,8 @@ export default function Journal() {
   }, [trades, query]);
 
   const summary = useMemo(() => computeStats(filtered), [filtered]);
+  const symbolDefaults = f.symbol.trim() ? defaultsFor(f.symbol, instruments, settings) : null;
+  const allSymbols = useMemo(() => [...new Set([...symbols, ...Object.keys(instruments)])].sort(), [symbols, instruments]);
 
   const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
@@ -52,6 +56,7 @@ export default function Journal() {
     if (!f.symbol.trim()) return setError('Symbole manquant');
     if (qty == null || qty <= 0) return setError('Quantité invalide');
     if (entry == null) return setError('Prix d’entrée invalide');
+    const d = defaultsFor(f.symbol, instruments, settings);
     const now = Date.now();
     const trade: Trade = {
       id: uid(),
@@ -63,16 +68,16 @@ export default function Journal() {
       exit: parseNum(f.exit),
       stop: parseNum(f.stop),
       setup: f.setup.trim() || undefined,
-      fees: settings.defaultFees || undefined,
-      feePct: settings.defaultFeePct || undefined,
-      multiplier: settings.defaultMultiplier !== 1 ? settings.defaultMultiplier : undefined,
+      fees: d.fees || undefined,
+      feePct: d.feePct || undefined,
+      multiplier: d.multiplier !== 1 ? d.multiplier : undefined,
       createdAt: now,
       updatedAt: now,
     };
-    await db.trades.add(trade);
     setError('');
     setF((p) => ({ ...EMPTY, setup: p.setup }));
     symbolRef.current?.focus();
+    await db.trades.add(trade);
   }
 
   return (
@@ -85,7 +90,7 @@ export default function Journal() {
           </label>
           <label className="q-symbol">
             <span>Symbole</span>
-            <input ref={symbolRef} value={f.symbol} onChange={set('symbol')} placeholder="EURUSD" list="symbols" autoCapitalize="characters" autoComplete="off" />
+            <input ref={symbolRef} value={f.symbol} onChange={set('symbol')} placeholder="BTCUSDT, ES…" list="symbols" autoCapitalize="characters" autoComplete="off" />
           </label>
           <div className="q-side">
             <span>Sens</span>
@@ -104,7 +109,7 @@ export default function Journal() {
           </label>
           <label className="q-entry">
             <span>Entrée</span>
-            <input value={f.entry} onChange={set('entry')} inputMode="decimal" placeholder="1,0850" />
+            <input value={f.entry} onChange={set('entry')} inputMode="decimal" placeholder="prix" />
           </label>
           <label className="q-exit">
             <span>Sortie</span>
@@ -121,8 +126,16 @@ export default function Journal() {
           <button type="submit" className="btn primary q-add">Ajouter ↵</button>
         </div>
         {error && <p className="error">{error}</p>}
+        {symbolDefaults && (symbolDefaults.known || symbolDefaults.multiplier !== 1 || symbolDefaults.fees > 0 || symbolDefaults.feePct > 0) && (
+          <p className="quick-hint">
+            {symbolDefaults.label ? `${symbolDefaults.label} · ` : ''}
+            Valeur du point ×{String(symbolDefaults.multiplier).replace('.', ',')}
+            {symbolDefaults.fees > 0 && ` · frais ${String(symbolDefaults.fees).replace('.', ',')} ${settings.currency}`}
+            {symbolDefaults.feePct > 0 && ` · frais ${String(symbolDefaults.feePct).replace('.', ',')} %`}
+          </p>
+        )}
         <datalist id="setups">{setups.map((s) => <option key={s} value={s} />)}</datalist>
-        <datalist id="symbols">{symbols.map((s) => <option key={s} value={s} />)}</datalist>
+        <datalist id="symbols">{allSymbols.map((s) => <option key={s} value={s} />)}</datalist>
       </form>
 
       <div className="toolbar">

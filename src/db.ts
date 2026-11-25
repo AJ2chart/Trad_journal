@@ -60,16 +60,17 @@ const blobToDataUrl = (b: Blob) =>
   });
 
 export async function exportBackup(): Promise<Blob> {
-  const [trades, lessons, images, settings] = await Promise.all([
+  const [trades, lessons, images, settings, instruments] = await Promise.all([
     db.trades.toArray(),
     db.lessons.toArray(),
     db.images.toArray(),
     getSettings(),
+    db.kv.get('instruments').then((r) => r?.value ?? {}),
   ]);
   const imgs = await Promise.all(
     images.map(async ({ blob, ...rest }) => ({ ...rest, data: await blobToDataUrl(blob) })),
   );
-  const payload = { app: 'trad-journal', version: 1, exportedAt: new Date().toISOString(), settings, trades, lessons, images: imgs };
+  const payload = { app: 'trad-journal', version: 1, exportedAt: new Date().toISOString(), settings, instruments, trades, lessons, images: imgs };
   return new Blob([JSON.stringify(payload)], { type: 'application/json' });
 }
 
@@ -90,6 +91,10 @@ export async function importBackup(file: File, mode: 'merge' | 'replace') {
     await db.lessons.bulkPut(data.lessons ?? []);
     await db.images.bulkPut(images);
     if (data.settings) await db.kv.put({ key: 'settings', value: data.settings });
+    if (data.instruments) {
+      const cur = mode === 'merge' ? ((await db.kv.get('instruments'))?.value ?? {}) : {};
+      await db.kv.put({ key: 'instruments', value: { ...(cur as object), ...data.instruments } });
+    }
   });
   return { trades: data.trades?.length ?? 0, lessons: data.lessons?.length ?? 0, images: images.length };
 }

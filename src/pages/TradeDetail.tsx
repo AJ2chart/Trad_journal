@@ -6,6 +6,7 @@ import { sortChrono, tradeFees, tradePnl, tradeR, tradeRisk } from '../calc';
 import { fmtMoney, fmtR, parseNum, pnlClass, useSettings } from '../format';
 import { EMOTIONS, MISTAKES, type Trade } from '../types';
 import ImageGallery from '../components/ImageGallery';
+import { saveInstrument, useInstruments } from '../instruments';
 
 export default function TradeDetail() {
   const { id = '' } = useParams();
@@ -17,6 +18,7 @@ export default function TradeDetail() {
 
 function Editor({ initial }: { initial: Trade }) {
   const settings = useSettings();
+  const instruments = useInstruments();
   const navigate = useNavigate();
   const [t, setT] = useState<Trade>(initial);
   const pending = useRef<Partial<Trade>>({});
@@ -104,9 +106,14 @@ function Editor({ initial }: { initial: Trade }) {
             <NumField label="Objectif" value={t.target} onChange={(v) => patch({ target: v })} />
             <NumField label={`Frais fixes (${settings.currency})`} value={t.fees} onChange={(v) => patch({ fees: v ?? undefined })} />
             <NumField label="Frais (%)" value={t.feePct} onChange={(v) => patch({ feePct: v ?? undefined })} placeholder="ex. 0,1" />
-            <NumField label="Valeur du point" value={t.multiplier ?? 1} onChange={(v) => patch({ multiplier: v ?? undefined })} />
+            <NumField label="Valeur du point" value={t.multiplier ?? 1} onChange={(v) => {
+              patch({ multiplier: v ?? undefined });
+              // Retenu pour les prochains trades sur ce symbole.
+              if (v != null && v > 0 && t.symbol) void saveInstrument(t.symbol, { multiplier: v });
+            }} />
             <Field label="Setup"><input value={t.setup ?? ''} onChange={(e) => patch({ setup: e.target.value || undefined })} /></Field>
           </div>
+          {instruments[t.symbol] && <p className="muted small">Valeur du point retenue pour {t.symbol} : ×{String(instruments[t.symbol].multiplier).replace('.', ',')} (modifiable dans Réglages → Instruments).</p>}
         </section>
 
         <section className="card">
