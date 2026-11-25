@@ -1,36 +1,72 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import Journal from './pages/Journal';
 import TradeDetail from './pages/TradeDetail';
 import Stats from './pages/Stats';
 import Lessons from './pages/Lessons';
 import SettingsPage from './pages/Settings';
+import Icon, { type IconName } from './components/Icon';
+import QuickAdd from './components/QuickAdd';
+import { CountUp, Toaster } from './components/ui';
+import { db } from './db';
+import { tradePnl } from './calc';
+import { fmtMoney, pnlClass, today, useSettings } from './format';
 
-const NAV = [
-  { to: '/', label: 'Journal', icon: 'M4 5h16M4 12h16M4 19h10' },
-  { to: '/stats', label: 'Stats', icon: 'M5 20V10M12 20V4M19 20v-7' },
-  { to: '/lecons', label: 'Leçons', icon: 'M5 4h11l3 3v13H5zM9 10h6M9 14h6' },
-  { to: '/reglages', label: 'Réglages', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 12h2M18 12h2M12 4v2M12 18v2' },
+const NAV: { to: string; label: string; icon: IconName }[] = [
+  { to: '/', label: 'Journal', icon: 'journal' },
+  { to: '/stats', label: 'Stats', icon: 'stats' },
+  { to: '/lecons', label: 'Leçons', icon: 'lessons' },
+  { to: '/reglages', label: 'Réglages', icon: 'settings' },
 ];
 
+function TodayCard() {
+  const { currency } = useSettings();
+  const t = today();
+  const trades = useLiveQuery(() => db.trades.where('date').equals(t).toArray(), [t]) ?? [];
+  const pnl = trades.reduce((s, x) => s + (tradePnl(x) ?? 0), 0);
+  return (
+    <div className="today-card">
+      <span className="eyebrow">Aujourd’hui</span>
+      <strong className={`mono ${pnlClass(pnl)}`}><CountUp value={pnl} format={(v) => fmtMoney(v, currency)} /></strong>
+      <span className="muted small">{trades.length} trade{trades.length > 1 ? 's' : ''}</span>
+    </div>
+  );
+}
+
 export default function App() {
+  const [sheet, setSheet] = useState(false);
+  const loc = useLocation();
+  useEffect(() => { setSheet(false); window.scrollTo(0, 0); }, [loc.pathname]);
+  useEffect(() => {
+    if (!sheet) return;
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && setSheet(false);
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [sheet]);
+
   return (
     <div className="app">
-      <header className="topbar">
+      <div className="backdrop" aria-hidden />
+      <aside className="sidebar">
         <div className="brand">
-          <img src="./icon.svg" alt="" width={26} height={26} />
-          <span>Trad Journal</span>
+          <img src="./icon.svg" alt="" width={30} height={30} />
+          <div>
+            <strong>Trad Journal</strong>
+            <span>Carnet de trading</span>
+          </div>
         </div>
-        <nav className="nav">
+        <nav className="side-nav">
           {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.to === '/'} className="nav-link">
-              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
-                <path d={n.icon} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+            <NavLink key={n.to} to={n.to} end={n.to === '/'} className="side-link">
+              <Icon name={n.icon} size={19} />
               <span>{n.label}</span>
             </NavLink>
           ))}
         </nav>
-      </header>
+        <TodayCard />
+      </aside>
+
       <main className="main">
         <Routes>
           <Route path="/" element={<Journal />} />
@@ -41,6 +77,26 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      <nav className="tabbar">
+        {NAV.slice(0, 2).map((n) => (
+          <NavLink key={n.to} to={n.to} end={n.to === '/'} className="tab"><Icon name={n.icon} size={21} /><span>{n.label}</span></NavLink>
+        ))}
+        <button className="fab" onClick={() => setSheet(true)} aria-label="Ajouter un trade"><Icon name="plus" size={26} stroke={2.4} /></button>
+        {NAV.slice(2).map((n) => (
+          <NavLink key={n.to} to={n.to} className="tab"><Icon name={n.icon} size={21} /><span>{n.label}</span></NavLink>
+        ))}
+      </nav>
+
+      {sheet && (
+        <div className="sheet-wrap" onClick={() => setSheet(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Nouveau trade">
+            <div className="sheet-grip" />
+            <QuickAdd variant="sheet" autoFocus onDone={() => setSheet(false)} />
+          </div>
+        </div>
+      )}
+      <Toaster />
     </div>
   );
 }

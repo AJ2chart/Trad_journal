@@ -5,6 +5,9 @@ import { db } from '../db';
 import { computeStats, type Group } from '../calc';
 import { fmtDate, fmtMoney, fmtPct, fmtR, pnlClass, today, useSettings } from '../format';
 import { EquityChart, PnlBars } from '../components/Charts';
+import Calendar from '../components/Calendar';
+import Icon, { type IconName } from '../components/Icon';
+import { CountUp, Ring } from '../components/ui';
 
 const PERIODS = [
   { id: 'all', label: 'Tout' },
@@ -43,6 +46,12 @@ export default function Stats() {
 
   return (
     <div className="page">
+      <header className="page-head">
+        <div>
+          <span className="eyebrow">Statistiques</span>
+          <h1>Ce que disent <span className="grad-text">tes chiffres.</span></h1>
+        </div>
+      </header>
       <div className="filters">
         <div className="seg">
           {PERIODS.map((p) => <button key={p.id} className={period === p.id ? 'on' : ''} onClick={() => setPeriod(p.id)}>{p.label}</button>)}
@@ -53,20 +62,34 @@ export default function Stats() {
       </div>
 
       {s.closed === 0 ? (
-        <div className="card empty"><p><strong>Pas encore de trade clôturé sur cette période.</strong></p><p>Les statistiques apparaîtront dès qu’un trade aura un prix de sortie.</p></div>
+        <div className="empty-state glass"><div className="empty-ico"><Icon name="stats" size={28} /></div><h2>Pas encore de trade clôturé</h2><p className="muted">Les statistiques apparaissent dès qu’un trade a un prix de sortie sur cette période.</p></div>
       ) : (
         <>
+          <section className="stats-hero glass">
+            <div className="sh-main">
+              <span className="eyebrow">P&amp;L net</span>
+              <strong className={`sh-pnl mono ${pnlClass(s.netPnl)}`}><CountUp value={s.netPnl} format={money} /></strong>
+              <span className="muted small">{s.closed} trades clôturés{s.open ? ` · ${s.open} ouverts` : ''}</span>
+            </div>
+            <div className="sh-ring">
+              <Ring value={s.winRate} size={104} label={<><strong className="mono">{Math.round(s.winRate * 100)}%</strong><span>réussite</span></>} />
+              <div className="sh-split">
+                <span><i className="dot gain" />{s.wins} gagnants</span>
+                <span><i className="dot loss" />{s.losses} perdants</span>
+                {s.breakeven > 0 && <span><i className="dot" />{s.breakeven} nuls</span>}
+              </div>
+            </div>
+          </section>
+
           <div className="kpis">
-            <Kpi label="P&L net" value={money(s.netPnl)} cls={pnlClass(s.netPnl)} sub={`${s.closed} trades clôturés${s.open ? ` · ${s.open} ouverts` : ''}`} />
-            <Kpi label="Taux de réussite" value={fmtPct(s.winRate)} sub={`${s.wins} gagnants · ${s.losses} perdants${s.breakeven ? ` · ${s.breakeven} nuls` : ''}`} />
-            <Kpi label="Profit factor" value={s.profitFactor == null ? '—' : s.profitFactor === Infinity ? '∞' : s.profitFactor.toFixed(2).replace('.', ',')} sub="gains bruts / pertes brutes" />
-            <Kpi label="Espérance par trade" value={money(s.expectancy)} cls={pnlClass(s.expectancy)} sub={s.avgR == null ? 'renseigne le stop pour le R' : `R moyen ${fmtR(s.avgR)} (${s.rCount} trades)`} />
-            <Kpi label="Gain moyen / perte moyenne" value={s.payoff == null ? '—' : s.payoff.toFixed(2).replace('.', ',')} sub={`${money(s.avgWin)} / ${money(s.avgLoss)}`} />
-            <Kpi label="Drawdown max" value={s.maxDrawdown ? money(-s.maxDrawdown) : '0'} cls={s.maxDrawdown ? 'loss' : ''} sub={`Séries max : ${s.maxWinStreak} gagnants · ${s.maxLossStreak} perdants`} />
+            <Kpi icon="zap" label="Profit factor" value={s.profitFactor == null ? '—' : s.profitFactor === Infinity ? '∞' : s.profitFactor.toFixed(2).replace('.', ',')} sub="gains bruts / pertes brutes" />
+            <Kpi icon="target" label="Espérance par trade" value={money(s.expectancy)} cls={pnlClass(s.expectancy)} sub={s.avgR == null ? 'renseigne le stop pour le R' : `R moyen ${fmtR(s.avgR)} (${s.rCount} trades)`} />
+            <Kpi icon="sparkle" label="Gain moyen / perte moyenne" value={s.payoff == null ? '—' : s.payoff.toFixed(2).replace('.', ',')} sub={`${money(s.avgWin)} / ${money(s.avgLoss)}`} />
+            <Kpi icon="shield" label="Drawdown max" value={s.maxDrawdown ? money(-s.maxDrawdown) : '0'} cls={s.maxDrawdown ? 'loss' : ''} sub={`Séries max : ${s.maxWinStreak} gagnants · ${s.maxLossStreak} perdants`} />
           </div>
 
           <section className="card">
-            <h2>P&amp;L cumulé</h2>
+            <h2><Icon name="stats" size={17} /> P&amp;L cumulé</h2>
             <EquityChart format={money} points={s.equity.map((e) => ({
               label: fmtDate(e.trade.date),
               value: e.cum,
@@ -76,15 +99,22 @@ export default function Stats() {
 
           <div className="two-col">
             <section className="card">
+              <h2><Icon name="calendar" size={17} /> Calendrier</h2>
+              <Calendar trades={(trades ?? []).filter((t) => side === 'all' || t.side === side)} money={money} />
+            </section>
+            <section className="card">
               <h2>P&amp;L par mois</h2>
-              <PnlBars format={money} points={s.byMonth.map((g) => ({
+              <PnlBars height={300} format={money} points={s.byMonth.map((g) => ({
                 label: `${MONTHS[Number(g.key.slice(5)) - 1]} ${g.key.slice(2, 4)}`,
                 value: g.pnl,
                 detail: <span>{g.count} trades · {fmtPct(g.winRate)}</span>,
               }))} />
             </section>
+          </div>
+
+          <div className="two-col">
             <section className="card">
-              <h2>Extrêmes</h2>
+              <h2><Icon name="flame" size={17} /> Extrêmes</h2>
               <ul className="extremes">
                 {s.best && <li><span className="muted">Meilleur trade</span><Link to={`/trade/${s.best.trade.id}`}>{s.best.trade.symbol} · {fmtDate(s.best.trade.date)}</Link><strong className={pnlClass(s.best.pnl)}>{money(s.best.pnl)}</strong></li>}
                 {s.worst && <li><span className="muted">Pire trade</span><Link to={`/trade/${s.worst.trade.id}`}>{s.worst.trade.symbol} · {fmtDate(s.worst.trade.date)}</Link><strong className={pnlClass(s.worst.pnl)}>{money(s.worst.pnl)}</strong></li>}
@@ -93,9 +123,6 @@ export default function Stats() {
                 <li><span className="muted">Frais payés</span><span /><strong>{fmtMoney(s.totalFees, currency, false)}</strong></li>
               </ul>
             </section>
-          </div>
-
-          <div className="two-col">
             <Breakdown title="Par setup" rows={s.bySetup} money={money} />
             <Breakdown title="Par erreur" rows={s.byMistake} money={money} hint="Ce que te coûtent tes erreurs" />
             <Breakdown title="Par symbole" rows={s.bySymbol} money={money} />
@@ -110,10 +137,10 @@ export default function Stats() {
   );
 }
 
-function Kpi({ label, value, sub, cls = '' }: { label: string; value: string; sub?: string; cls?: string }) {
+function Kpi({ label, value, sub, cls = '', icon }: { label: string; value: string; sub?: string; cls?: string; icon?: IconName }) {
   return (
     <div className="kpi card">
-      <span className="kpi-label">{label}</span>
+      <span className="kpi-label">{icon && <Icon name={icon} size={14} />}{label}</span>
       <strong className={`kpi-value ${cls}`}>{value}</strong>
       {sub && <span className="kpi-sub">{sub}</span>}
     </div>

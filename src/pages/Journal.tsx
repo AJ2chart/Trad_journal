@@ -1,189 +1,179 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useNavigate } from 'react-router-dom';
-import { db, uid } from '../db';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { db } from '../db';
 import { computeStats, sortChrono, tradePnl, tradeR } from '../calc';
-import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtR, parseNum, pnlClass, today, useSettings } from '../format';
-import type { Side, Trade } from '../types';
-import { defaultsFor, useInstruments } from '../instruments';
+import { fmtMoney, fmtNum, fmtPct, fmtR, pnlClass, today, useSettings } from '../format';
+import type { Trade } from '../types';
+import QuickAdd from '../components/QuickAdd';
+import Icon from '../components/Icon';
+import { CountUp, SidePill, Sparkline, SymbolBadge } from '../components/ui';
 
-const EMPTY = { symbol: '', qty: '', entry: '', exit: '', stop: '', setup: '' };
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dayLabel = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+const dayLabelYear = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+function prettyDay(d: string) {
+  const t = today();
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  if (d === t) return 'Aujourd’hui';
+  if (d === iso(y)) return 'Hier';
+  const date = new Date(d + 'T12:00:00');
+  const s = (date.getFullYear() === new Date().getFullYear() ? dayLabel : dayLabelYear).format(date);
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function sumPnl(list: Trade[]) {
+  return list.reduce((s, t) => s + (tradePnl(t) ?? 0), 0);
+}
 
 export default function Journal() {
   const settings = useSettings();
-  const instruments = useInstruments();
+  const money = (v: number) => fmtMoney(v, settings.currency);
   const navigate = useNavigate();
-  const trades = useLiveQuery(() => db.trades.toArray(), []) ?? [];
+  const trades = useLiveQuery(() => db.trades.toArray(), []);
   const imageTradeIds = useLiveQuery(async () => new Set(await db.images.orderBy('tradeId').uniqueKeys()), []);
   const lessonTradeIds = useLiveQuery(async () => new Set(await db.lessons.orderBy('tradeIds').uniqueKeys()), []);
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState(params.get('q') ?? '');
 
-  const [date, setDate] = useState(today());
-  const [side, setSide] = useState<Side>('long');
-  const [f, setF] = useState(EMPTY);
-  const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
-  const symbolRef = useRef<HTMLInputElement>(null);
-
-  const setups = useMemo(
-    () => [...new Set(trades.map((t) => t.setup?.trim()).filter(Boolean) as string[])].sort(),
-    [trades],
-  );
-  const symbols = useMemo(() => [...new Set(trades.map((t) => t.symbol))].sort(), [trades]);
+  const all = trades ?? [];
+  const periods = useMemo(() => {
+    const t = today();
+    const now = new Date();
+    const monday = new Date(now); monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const week = iso(monday);
+    const month = t.slice(0, 8) + '01';
+    const pick = (from: string) => all.filter((x) => x.date >= from);
+    const todays = all.filter((x) => x.date === t);
+    return {
+      today: { pnl: sumPnl(todays), n: todays.length },
+      week: { pnl: sumPnl(pick(week)), n: pick(week).length },
+      month: { pnl: sumPnl(pick(month)), n: pick(month).length },
+      total: computeStats(all),
+    };
+  }, [all]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q
-      ? trades.filter((t) =>
-          [t.symbol, t.setup, t.date, ...(t.mistakes ?? []), ...(t.emotions ?? [])]
-            .filter(Boolean)
-            .some((s) => s!.toLowerCase().includes(q)),
-        )
-      : trades;
+      ? all.filter((t) => [t.symbol, t.setup, t.date, ...(t.mistakes ?? []), ...(t.emotions ?? [])].filter(Boolean).some((s) => s!.toLowerCase().includes(q)))
+      : all;
     return sortChrono(list).reverse();
-  }, [trades, query]);
+  }, [all, query]);
 
-  const summary = useMemo(() => computeStats(filtered), [filtered]);
-  const symbolDefaults = f.symbol.trim() ? defaultsFor(f.symbol, instruments, settings) : null;
-  const allSymbols = useMemo(() => [...new Set([...symbols, ...Object.keys(instruments)])].sort(), [symbols, instruments]);
+  const groups = useMemo(() => {
+    const m = new Map<string, Trade[]>();
+    for (const t of filtered) m.set(t.date, [...(m.get(t.date) ?? []), t]);
+    return [...m.entries()];
+  }, [filtered]);
 
-  const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setF((p) => ({ ...p, [k]: e.target.value }));
-
-  async function add(e: FormEvent) {
-    e.preventDefault();
-    const qty = parseNum(f.qty);
-    const entry = parseNum(f.entry);
-    if (!f.symbol.trim()) return setError('Symbole manquant');
-    if (qty == null || qty <= 0) return setError('Quantité invalide');
-    if (entry == null) return setError('Prix d’entrée invalide');
-    const d = defaultsFor(f.symbol, instruments, settings);
-    const now = Date.now();
-    const trade: Trade = {
-      id: uid(),
-      date,
-      symbol: f.symbol.trim().toUpperCase(),
-      side,
-      qty,
-      entry,
-      exit: parseNum(f.exit),
-      stop: parseNum(f.stop),
-      setup: f.setup.trim() || undefined,
-      fees: d.fees || undefined,
-      feePct: d.feePct || undefined,
-      multiplier: d.multiplier !== 1 ? d.multiplier : undefined,
-      createdAt: now,
-      updatedAt: now,
-    };
-    setError('');
-    setF((p) => ({ ...EMPTY, setup: p.setup }));
-    symbolRef.current?.focus();
-    await db.trades.add(trade);
-  }
+  const equity = periods.total.equity.map((e) => e.cum);
 
   return (
     <div className="page">
-      <form className="quick card" onSubmit={add} aria-label="Ajout rapide d’un trade">
-        <div className="quick-grid">
-          <label className="q-date">
-            <span>Date</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-          </label>
-          <label className="q-symbol">
-            <span>Symbole</span>
-            <input ref={symbolRef} value={f.symbol} onChange={set('symbol')} placeholder="BTCUSDT, ES…" list="symbols" autoCapitalize="characters" autoComplete="off" />
-          </label>
-          <div className="q-side">
-            <span>Sens</span>
-            <button
-              type="button"
-              className={`side-toggle ${side}`}
-              onClick={() => setSide((s) => (s === 'long' ? 'short' : 'long'))}
-              aria-label={`Sens : ${side}. Cliquer pour changer`}
-            >
-              {side === 'long' ? '▲ Long' : '▼ Short'}
-            </button>
-          </div>
-          <label className="q-qty">
-            <span>Qté</span>
-            <input value={f.qty} onChange={set('qty')} inputMode="decimal" placeholder="1" />
-          </label>
-          <label className="q-entry">
-            <span>Entrée</span>
-            <input value={f.entry} onChange={set('entry')} inputMode="decimal" placeholder="prix" />
-          </label>
-          <label className="q-exit">
-            <span>Sortie</span>
-            <input value={f.exit} onChange={set('exit')} inputMode="decimal" placeholder="ouvert" />
-          </label>
-          <label className="q-stop">
-            <span>Stop</span>
-            <input value={f.stop} onChange={set('stop')} inputMode="decimal" placeholder="optionnel" />
-          </label>
-          <label className="q-setup">
-            <span>Setup</span>
-            <input value={f.setup} onChange={set('setup')} list="setups" placeholder="Breakout…" autoComplete="off" />
-          </label>
-          <button type="submit" className="btn primary q-add">Ajouter ↵</button>
+      <header className="page-head">
+        <div>
+          <span className="eyebrow">Journal</span>
+          <h1>Tes trades, <span className="grad-text">au propre.</span></h1>
         </div>
-        {error && <p className="error">{error}</p>}
-        {symbolDefaults && (symbolDefaults.known || symbolDefaults.multiplier !== 1 || symbolDefaults.fees > 0 || symbolDefaults.feePct > 0) && (
-          <p className="quick-hint">
-            {symbolDefaults.label ? `${symbolDefaults.label} · ` : ''}
-            Valeur du point ×{String(symbolDefaults.multiplier).replace('.', ',')}
-            {symbolDefaults.fees > 0 && ` · frais ${String(symbolDefaults.fees).replace('.', ',')} ${settings.currency}`}
-            {symbolDefaults.feePct > 0 && ` · frais ${String(symbolDefaults.feePct).replace('.', ',')} %`}
-          </p>
-        )}
-        <datalist id="setups">{setups.map((s) => <option key={s} value={s} />)}</datalist>
-        <datalist id="symbols">{allSymbols.map((s) => <option key={s} value={s} />)}</datalist>
-      </form>
+      </header>
+
+      <section className="tiles">
+        <PeriodTile label="Aujourd’hui" pnl={periods.today.pnl} n={periods.today.n} money={money} accent />
+        <PeriodTile label="Cette semaine" pnl={periods.week.pnl} n={periods.week.n} money={money} />
+        <PeriodTile label="Ce mois" pnl={periods.month.pnl} n={periods.month.n} money={money} />
+        <div className="tile tile-equity">
+          <div className="tile-top">
+            <span className="tile-label">Total</span>
+            <span className="tile-chip">{fmtPct(periods.total.winRate)} réussite</span>
+          </div>
+          <strong className={`tile-value mono ${pnlClass(periods.total.netPnl)}`}><CountUp value={periods.total.netPnl} format={money} /></strong>
+          <div className={`tile-spark ${pnlClass(periods.total.netPnl) || 'gain'}`}><Sparkline values={[0, ...equity]} width={220} height={36} /></div>
+        </div>
+      </section>
+
+      <div className="quick-desktop"><QuickAdd /></div>
 
       <div className="toolbar">
-        <input className="search" type="search" placeholder="Filtrer (symbole, setup, erreur…)" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <div className="summary">
-          <span>{summary.total} trades</span>
-          <span>Réussite {fmtPct(summary.winRate)}</span>
-          <strong className={pnlClass(summary.netPnl)}>{fmtMoney(summary.netPnl, settings.currency)}</strong>
-        </div>
+        <label className="search">
+          <Icon name="search" size={16} />
+          <input type="search" placeholder="Rechercher : symbole, setup, erreur…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
+        <span className="muted small">{filtered.length} trade{filtered.length > 1 ? 's' : ''}</span>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="empty card">
-          <p><strong>{trades.length ? 'Aucun trade ne correspond au filtre.' : 'Aucun trade pour l’instant.'}</strong></p>
-          {!trades.length && <p>Remplis la ligne ci-dessus et appuie sur Entrée. Clique ensuite sur un trade pour ajouter capture, raisons et leçons.</p>}
+      {trades && filtered.length === 0 ? (
+        <div className="empty-state glass">
+          <div className="empty-ico"><Icon name={all.length ? 'search' : 'sparkle'} size={28} /></div>
+          <h2>{all.length ? 'Aucun trade ne correspond' : 'Ton journal commence ici'}</h2>
+          <p className="muted">{all.length ? 'Essaie un autre filtre.' : 'Saisis ton premier trade en une ligne. Ensuite, ouvre-le pour ajouter la capture, ton raisonnement et tes leçons.'}</p>
         </div>
       ) : (
-        <div className="trade-table" role="table">
-          <div className="tr th" role="row">
-            <span>Date</span><span>Symbole</span><span>Sens</span><span className="num">Qté</span>
-            <span className="num">Entrée</span><span className="num">Sortie</span><span className="num">P&amp;L</span>
-            <span className="num">R</span><span>Setup</span><span />
-          </div>
-          {filtered.map((t) => {
-            const pnl = tradePnl(t);
+        <div className="days">
+          {groups.map(([date, list]) => {
+            const pnl = sumPnl(list);
+            const closed = list.some((t) => t.exit != null);
             return (
-              <div key={t.id} className="tr" role="row" tabIndex={0}
-                onClick={() => navigate(`/trade/${t.id}`)}
-                onKeyDown={(e) => e.key === 'Enter' && navigate(`/trade/${t.id}`)}>
-                <span className="c-date" data-meta={` · ${t.side === 'long' ? 'Long' : 'Short'}${t.exit == null ? ' · ouvert' : ''}${t.setup ? ` · ${t.setup}` : ''}`}>{fmtDate(t.date)}</span>
-                <span className="c-symbol">{t.symbol}</span>
-                <span className={`c-side side-${t.side}`}>{t.side === 'long' ? '▲ Long' : '▼ Short'}</span>
-                <span className="num c-qty">{fmtNum(t.qty)}</span>
-                <span className="num c-entry">{fmtNum(t.entry)}</span>
-                <span className="num c-exit">{t.exit == null ? <em className="open">ouvert</em> : fmtNum(t.exit)}</span>
-                <span className={`num c-pnl ${pnlClass(pnl)}`}>{pnl == null ? '—' : fmtMoney(pnl, settings.currency)}</span>
-                <span className="num c-r">{fmtR(tradeR(t))}</span>
-                <span className="c-setup">{t.setup ?? ''}</span>
-                <span className="c-flags">
-                  {imageTradeIds?.has(t.id) && <span title="Capture">📷</span>}
-                  {lessonTradeIds?.has(t.id) && <span title="Leçon liée">💡</span>}
-                  {t.reasonEntry && <span title="Raison notée">✎</span>}
-                </span>
-              </div>
+              <section key={date} className="day">
+                <header className="day-head">
+                  <h2>{prettyDay(date)}</h2>
+                  <span className="day-meta">
+                    {list.length} trade{list.length > 1 ? 's' : ''}
+                    {closed && <strong className={`mono ${pnlClass(pnl)}`}>{money(pnl)}</strong>}
+                  </span>
+                </header>
+                <div className="rows glass">
+                  {list.map((t, i) => {
+                    const p = tradePnl(t);
+                    const r = tradeR(t);
+                    return (
+                      <div key={t.id} className="trow" role="link" tabIndex={0} style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}
+                        onClick={() => navigate(`/trade/${t.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/trade/${t.id}`)}>
+                        <SymbolBadge symbol={t.symbol} />
+                        <div className="trow-main">
+                          <strong>{t.symbol}</strong>
+                          <span className="trow-sub">
+                            {t.time && <>{t.time} · </>}{t.setup ?? <em>sans setup</em>}
+                          </span>
+                        </div>
+                        <SidePill side={t.side} />
+                        <div className="trow-prices mono">
+                          <span>{fmtNum(t.entry)}</span>
+                          <Icon name="right" size={12} />
+                          {t.exit == null ? <span className="open-tag">ouvert</span> : <span>{fmtNum(t.exit)}</span>}
+                          <span className="trow-qty">× {fmtNum(t.qty)}</span>
+                        </div>
+                        <div className="trow-flags">
+                          {imageTradeIds?.has(t.id) && <Icon name="camera" size={15} />}
+                          {lessonTradeIds?.has(t.id) && <Icon name="bulb" size={15} />}
+                          {t.reasonEntry && <Icon name="pen" size={15} />}
+                        </div>
+                        <div className="trow-result">
+                          <strong className={`mono ${pnlClass(p)}`}>{p == null ? '—' : money(p)}</strong>
+                          {r != null && <span className={`r-chip ${pnlClass(r)}`}>{fmtR(r)}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function PeriodTile({ label, pnl, n, money, accent }: { label: string; pnl: number; n: number; money: (v: number) => string; accent?: boolean }) {
+  return (
+    <div className={`tile ${accent ? 'tile-accent' : ''}`}>
+      <div className="tile-top">
+        <span className="tile-label">{label}</span>
+        <span className="tile-chip">{n} trade{n > 1 ? 's' : ''}</span>
+      </div>
+      <strong className={`tile-value mono ${pnlClass(pnl)}`}><CountUp value={pnl} format={money} /></strong>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { db, uid } from '../db';
 import { tradePnl } from '../calc';
 import { fmtDate, fmtMoney, pnlClass, useSettings } from '../format';
 import type { Lesson, Trade } from '../types';
+import Icon from '../components/Icon';
 
 export default function Lessons() {
   const { currency } = useSettings();
@@ -32,8 +33,14 @@ export default function Lessons() {
 
   return (
     <div className="page">
+      <header className="page-head">
+        <div>
+          <span className="eyebrow">Leçons</span>
+          <h1>Ce que le marché <span className="grad-text">t’a appris.</span></h1>
+        </div>
+      </header>
       <section className="card">
-        <h2>Nouvelle leçon</h2>
+        <h2><Icon name="sparkle" size={17} /> Nouvelle leçon</h2>
         <div className="new-lesson">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. : Ne jamais déplacer mon stop" onKeyDown={(e) => e.key === 'Enter' && create()} />
           <textarea rows={2} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Pourquoi, et comment l’appliquer" />
@@ -47,7 +54,10 @@ export default function Lessons() {
       </section>
 
       <div className="toolbar">
-        <input className="search" type="search" placeholder="Rechercher une leçon" value={q} onChange={(e) => setQ(e.target.value)} />
+        <label className="search">
+          <Icon name="search" size={16} />
+          <input type="search" placeholder="Rechercher une leçon" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
         {categories.length > 0 && (
           <select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Catégorie">
             <option value="">Toutes catégories</option>
@@ -57,7 +67,7 @@ export default function Lessons() {
       </div>
 
       {shown.length === 0 ? (
-        <div className="card empty"><p>{lessons.length ? 'Aucune leçon ne correspond.' : 'Aucune leçon pour l’instant. Note ici ce que tes trades t’apprennent.'}</p></div>
+        <div className="empty-state glass"><div className="empty-ico"><Icon name="bulb" size={28} /></div><h2>{lessons.length ? 'Aucune leçon ne correspond' : 'Pas encore de leçon'}</h2><p className="muted">{lessons.length ? 'Essaie un autre mot-clé.' : 'Chaque trade a quelque chose à t’apprendre. Note-le ici ou depuis le détail d’un trade.'}</p></div>
       ) : (
         <div className="lesson-cards">
           {shown.map((l) => <LessonCard key={l.id} lesson={l} trades={l.tradeIds.map((id) => byId.get(id)).filter(Boolean) as Trade[]} currency={currency} categories={categories} />)}
@@ -94,7 +104,7 @@ function LessonCard({ lesson, trades, currency, categories }: { lesson: Lesson; 
       ) : (
         <>
           <header>
-            <h3>💡 {lesson.title}</h3>
+            <h3>{lesson.title}</h3>
             <button className="btn ghost small" onClick={() => setEdit(true)}>Modifier</button>
           </header>
           {lesson.category && <span className="pill">{lesson.category}</span>}

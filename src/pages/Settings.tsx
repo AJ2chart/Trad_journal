@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { db, exportBackup, importBackup, saveSettings } from '../db';
 import { tradePnl } from '../calc';
 import { parseNum, useSettings } from '../format';
+import { toast } from '../components/ui';
+import Icon from '../components/Icon';
 import { FUTURES_PRESETS, deleteInstrument, saveInstrument, useInstruments, type Instrument } from '../instruments';
 
 function download(blob: Blob, name: string) {
@@ -25,6 +27,7 @@ export default function SettingsPage() {
   const [mult, setMult] = useState(String(settings.defaultMultiplier));
   const [msg, setMsg] = useState('');
   const [usage, setUsage] = useState('');
+  useEffect(() => { if (msg) { toast(msg); setMsg(''); } }, [msg]);
 
   useEffect(() => {
     setCurrency(settings.currency);
@@ -82,8 +85,14 @@ export default function SettingsPage() {
 
   return (
     <div className="page narrow">
+      <header className="page-head">
+        <div>
+          <span className="eyebrow">Réglages</span>
+          <h1>Ton <span className="grad-text">poste de travail.</span></h1>
+        </div>
+      </header>
       <section className="card">
-        <h2>Préférences</h2>
+        <h2><Icon name="settings" size={17} /> Préférences</h2>
         <div className="fields">
           <label className="field"><span>Devise</span><input value={currency} onChange={(e) => setCurrency(e.target.value)} /></label>
           <label className="field"><span>Frais fixes par trade</span><input inputMode="decimal" value={fees} onChange={(e) => setFees(e.target.value)} /></label>
@@ -97,7 +106,7 @@ export default function SettingsPage() {
       <InstrumentsSection currency={settings.currency} />
 
       <section className="card">
-        <h2>Sauvegarde</h2>
+        <h2><Icon name="download" size={17} /> Sauvegarde</h2>
         <p className="muted small">Tes données restent sur cet appareil{usage ? ` (${usage})` : ''}. Exporte régulièrement une sauvegarde : elle contient aussi les captures.</p>
         <div className="row wrap">
           <button className="btn primary" onClick={doExport}>Exporter la sauvegarde (.json)</button>
@@ -107,11 +116,10 @@ export default function SettingsPage() {
       </section>
 
       <section className="card">
-        <h2>Zone dangereuse</h2>
+        <h2><Icon name="trash" size={17} /> Zone dangereuse</h2>
         <button className="btn danger" onClick={wipe}>Effacer toutes les données</button>
       </section>
 
-      {msg && <p className="toast" role="status" onClick={() => setMsg('')}>{msg}</p>}
     </div>
   );
 }
@@ -131,7 +139,7 @@ function InstrumentsSection({ currency }: { currency: string }) {
 
   return (
     <section className="card">
-      <h2>Instruments</h2>
+      <h2><Icon name="target" size={17} /> Instruments</h2>
       <p className="muted small">
         Valeur du point et frais retenus par symbole, appliqués automatiquement à la saisie.
         Actions et crypto : rien à faire (valeur du point = 1). Futures : ajoute tes contrats ci-dessous.

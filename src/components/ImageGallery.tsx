@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, uid } from '../db';
+import Icon from './Icon';
 
 /** Réduit les grosses captures pour ne pas saturer le stockage du téléphone. */
 async function shrink(file: Blob, max = 2000): Promise<Blob> {
@@ -61,7 +62,7 @@ export default function ImageGallery({ tradeId }: { tradeId: string }) {
             <figure key={u.id}>
               <img src={u.url} alt="Capture du trade" onClick={() => setZoom(u.url)} />
               <button className="img-del" title="Supprimer l’image"
-                onClick={() => confirm('Supprimer cette image ?') && db.images.delete(u.id)}>✕</button>
+                onClick={() => confirm('Supprimer cette image ?') && db.images.delete(u.id)}><Icon name="x" size={14} stroke={2.4} /></button>
             </figure>
           ))}
         </div>
@@ -73,8 +74,9 @@ export default function ImageGallery({ tradeId }: { tradeId: string }) {
         onDrop={(e) => { e.preventDefault(); setDrag(false); void addFiles(e.dataTransfer.files); }}
       >
         <input type="file" accept="image/*" multiple hidden onChange={(e) => { void addFiles(e.target.files ?? []); e.target.value = ''; }} />
-        <strong>Ajouter une capture</strong>
-        <span className="muted">Cliquer, glisser une image, ou coller (Ctrl+V)</span>
+        <span className="drop-ico"><Icon name="upload" size={20} /></span>
+        <strong>{urls.length ? 'Ajouter une autre capture' : 'Ajoute la capture du trade'}</strong>
+        <span className="muted small">Clique, glisse une image ou colle-la (Ctrl+V)</span>
       </label>
       {zoom && (
         <div className="lightbox" onClick={() => setZoom(null)} role="dialog" aria-label="Capture agrandie">
