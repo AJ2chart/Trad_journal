@@ -5,6 +5,7 @@ import { parseNum, useSettings } from '../format';
 import { toast } from '../components/ui';
 import Icon from '../components/Icon';
 import { FUTURES_PRESETS, deleteInstrument, saveInstrument, useInstruments, type Instrument } from '../instruments';
+import { CATEGORIES, categoryOf, type Category } from '../catalog';
 
 function download(blob: Blob, name: string) {
   const a = document.createElement('a');
@@ -148,7 +149,7 @@ function InstrumentsSection({ currency }: { currency: string }) {
       {rows.length > 0 && (
         <div className="table-scroll">
           <table className="instruments">
-            <thead><tr><th>Symbole</th><th>Valeur du point</th><th>Frais fixes ({currency})</th><th>Frais %</th><th /></tr></thead>
+            <thead><tr><th>Symbole</th><th>Catégorie</th><th>Valeur du point</th><th>Frais fixes ({currency})</th><th>Frais %</th><th /></tr></thead>
             <tbody>
               {rows.map(([s, i]) => <InstrumentRow key={s} symbol={s} inst={i} />)}
             </tbody>
@@ -164,7 +165,7 @@ function InstrumentsSection({ currency }: { currency: string }) {
       <div className="presets">
         {FUTURES_PRESETS.map((p) => (
           <button key={p.symbol} className={instruments[p.symbol] ? 'chip on' : 'chip'} title={`${p.label} : ${p.multiplier} ${p.currency} par point`}
-            onClick={() => instruments[p.symbol] ? deleteInstrument(p.symbol) : saveInstrument(p.symbol, { multiplier: p.multiplier, label: p.label })}>
+            onClick={() => instruments[p.symbol] ? deleteInstrument(p.symbol) : saveInstrument(p.symbol, { multiplier: p.multiplier, label: p.label, category: 'futures' })}>
             {p.symbol} <span className="muted">×{String(p.multiplier).replace('.', ',')} {p.currency}</span>
           </button>
         ))}
@@ -190,6 +191,12 @@ function InstrumentRow({ symbol, inst }: { symbol: string; inst: Instrument }) {
   return (
     <tr>
       <td title={inst.label}>{symbol}</td>
+      <td>
+        <select value={inst.category ?? categoryOf(symbol)} aria-label={`Catégorie ${symbol}`}
+          onChange={(e) => void saveInstrument(symbol, { category: e.target.value as Category })}>
+          {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      </td>
       <td><input {...num('multiplier')} aria-label={`Valeur du point ${symbol}`} /></td>
       <td><input {...num('fees')} placeholder="—" aria-label={`Frais fixes ${symbol}`} /></td>
       <td><input {...num('feePct')} placeholder="—" aria-label={`Frais % ${symbol}`} /></td>

@@ -9,6 +9,7 @@ import ImageGallery from '../components/ImageGallery';
 import { saveInstrument, useInstruments } from '../instruments';
 import Icon from '../components/Icon';
 import { SidePill, SymbolBadge } from '../components/ui';
+import SymbolPicker from '../components/SymbolPicker';
 
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const prettyDate = (d: string) => {
@@ -174,7 +175,7 @@ function Editor({ initial }: { initial: Trade }) {
           <section className="card">
             <h2><Icon name="target" size={17} /> Exécution</h2>
             <div className="fields">
-              <Field label="Symbole"><input value={t.symbol} onChange={(e) => patch({ symbol: e.target.value.toUpperCase() })} /></Field>
+              <div className="field"><span>Symbole</span><SymbolPicker value={t.symbol} onChange={(v) => patch({ symbol: v })} /></div>
               <Field label="Sens">
                 <div className={`side-switch ${t.side}`} role="radiogroup" aria-label="Sens">
                   <button type="button" role="radio" aria-checked={t.side === 'long'} onClick={() => patch({ side: 'long' }, true)}>Long</button>

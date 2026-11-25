@@ -81,6 +81,7 @@ export interface Stats {
   byEmotion: Group[];
   byPlan: Group[];
   byMonth: Group[];
+  byCategory: Group[];
 }
 
 const WEEKDAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -101,7 +102,7 @@ function groupBy(rows: { trade: Trade; pnl: number }[], keys: (t: Trade) => stri
     .sort((a, b) => b.pnl - a.pnl);
 }
 
-export function computeStats(all: Trade[]): Stats {
+export function computeStats(all: Trade[], categorize?: (t: Trade) => string): Stats {
   const sorted = sortChrono(all);
   const closed = sorted
     .map((trade) => ({ trade, pnl: tradePnl(trade) }))
@@ -185,5 +186,6 @@ export function computeStats(all: Trade[]): Stats {
       t.followedPlan == null ? [] : [t.followedPlan ? 'Plan respecté' : 'Plan non respecté'],
     ),
     byMonth: groupBy(closed, (t) => [t.date.slice(0, 7)]).sort((a, b) => a.key.localeCompare(b.key)),
+    byCategory: categorize ? groupBy(closed, (t) => [categorize(t)]) : [],
   };
 }

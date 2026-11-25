@@ -10,6 +10,8 @@ export interface Instrument {
   feePct?: number;
   /** Libellé indicatif (ex. "E-mini S&P 500") */
   label?: string;
+  /** Catégorie choisie par l'utilisateur (sinon devinée) */
+  category?: import('./catalog').Category;
 }
 
 export type Instruments = Record<string, Instrument>;

@@ -8,6 +8,8 @@ import { EquityChart, PnlBars } from '../components/Charts';
 import Calendar from '../components/Calendar';
 import Icon, { type IconName } from '../components/Icon';
 import { CountUp, Ring } from '../components/ui';
+import { categoryLabel, categoryOf } from '../catalog';
+import { useInstruments } from '../instruments';
 
 const PERIODS = [
   { id: 'all', label: 'Tout' },
@@ -33,13 +35,14 @@ const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'aoû
 export default function Stats() {
   const { currency } = useSettings();
   const trades = useLiveQuery(() => db.trades.toArray(), []);
+  const instruments = useInstruments();
   const [period, setPeriod] = useState<Period>('all');
   const [side, setSide] = useState<'all' | 'long' | 'short'>('all');
 
   const s = useMemo(() => {
     const from = since(period);
-    return computeStats((trades ?? []).filter((t) => (!from || t.date >= from) && (side === 'all' || t.side === side)));
-  }, [trades, period, side]);
+    return computeStats((trades ?? []).filter((t) => (!from || t.date >= from) && (side === 'all' || t.side === side)), (t) => categoryLabel(categoryOf(t.symbol, instruments)));
+  }, [trades, period, side, instruments]);
 
   const money = (v: number) => fmtMoney(v, currency);
   if (!trades) return null;
@@ -123,6 +126,7 @@ export default function Stats() {
                 <li><span className="muted">Frais payés</span><span /><strong>{fmtMoney(s.totalFees, currency, false)}</strong></li>
               </ul>
             </section>
+            <Breakdown title="Par catégorie" rows={s.byCategory} money={money} />
             <Breakdown title="Par setup" rows={s.bySetup} money={money} />
             <Breakdown title="Par erreur" rows={s.byMistake} money={money} hint="Ce que te coûtent tes erreurs" />
             <Breakdown title="Par symbole" rows={s.bySymbol} money={money} />

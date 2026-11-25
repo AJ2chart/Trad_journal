@@ -8,6 +8,8 @@ import type { Trade } from '../types';
 import QuickAdd from '../components/QuickAdd';
 import Icon from '../components/Icon';
 import { CountUp, SidePill, Sparkline, SymbolBadge } from '../components/ui';
+import { CATEGORIES, categoryOf, type Category } from '../catalog';
+import { useInstruments } from '../instruments';
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const dayLabel = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -36,6 +38,8 @@ export default function Journal() {
   const lessonTradeIds = useLiveQuery(async () => new Set(await db.lessons.orderBy('tradeIds').uniqueKeys()), []);
   const [params] = useSearchParams();
   const [query, setQuery] = useState(params.get('q') ?? '');
+  const [cat, setCat] = useState<Category | 'all'>('all');
+  const instruments = useInstruments();
 
   const all = trades ?? [];
   const periods = useMemo(() => {
@@ -56,11 +60,15 @@ export default function Journal() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q
-      ? all.filter((t) => [t.symbol, t.setup, t.date, ...(t.mistakes ?? []), ...(t.emotions ?? [])].filter(Boolean).some((s) => s!.toLowerCase().includes(q)))
-      : all;
+    let list = cat === 'all' ? all : all.filter((t) => categoryOf(t.symbol, instruments) === cat);
+    if (q) list = list.filter((t) => [t.symbol, t.setup, t.date, ...(t.mistakes ?? []), ...(t.emotions ?? [])].filter(Boolean).some((s) => s!.toLowerCase().includes(q)));
     return sortChrono(list).reverse();
-  }, [all, query]);
+  }, [all, query, cat, instruments]);
+  const presentCats = useMemo(() => {
+    const counts = new Map<Category, number>();
+    for (const t of all) { const c = categoryOf(t.symbol, instruments); counts.set(c, (counts.get(c) ?? 0) + 1); }
+    return CATEGORIES.filter((c) => counts.has(c.id)).map((c) => ({ ...c, n: counts.get(c.id)! }));
+  }, [all, instruments]);
 
   const groups = useMemo(() => {
     const m = new Map<string, Trade[]>();
@@ -100,7 +108,17 @@ export default function Journal() {
           <Icon name="search" size={16} />
           <input type="search" placeholder="Rechercher : symbole, setup, erreur…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
-        <span className="muted small">{filtered.length} trade{filtered.length > 1 ? 's' : ''}</span>
+        {presentCats.length > 1 && (
+          <div className="cat-filter" role="tablist" aria-label="Catégorie">
+            <button role="tab" aria-selected={cat === 'all'} className={cat === 'all' ? 'on' : ''} onClick={() => setCat('all')}>Tout</button>
+            {presentCats.map((c) => (
+              <button key={c.id} role="tab" aria-selected={cat === c.id} className={cat === c.id ? 'on' : ''} onClick={() => setCat(c.id)}>
+                {c.label}<span>{c.n}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <span className="muted small toolbar-count">{filtered.length} trade{filtered.length > 1 ? 's' : ''}</span>
       </div>
 
       {trades && filtered.length === 0 ? (
