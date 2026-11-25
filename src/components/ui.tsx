@@ -77,13 +77,8 @@ export function Ring({ value, size = 92, label }: { value: number; size?: number
   return (
     <div className="ring" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-        <defs>
-          <linearGradient id="ring-grad" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor="#22d3ee" /><stop offset="1" stopColor="#a78bfa" />
-          </linearGradient>
-        </defs>
         <circle cx={size / 2} cy={size / 2} r={r} className="ring-track" />
-        <circle cx={size / 2} cy={size / 2} r={r} className="ring-val" stroke="url(#ring-grad)"
+        <circle cx={size / 2} cy={size / 2} r={r} className="ring-val"
           strokeDasharray={`${c * Math.max(0, Math.min(1, value))} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
       </svg>
       <span className="ring-label">{label}</span>
